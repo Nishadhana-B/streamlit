@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 from sample_data import generate_sample_data
 
@@ -27,15 +25,6 @@ st.markdown("""
         border-radius: 0.5rem;
         margin: 0.5rem 0;
     }
-    .expand-button {
-        background-color: #1f77b4;
-        color: white;
-        border: none;
-        padding: 0.2rem 0.5rem;
-        border-radius: 0.3rem;
-        cursor: pointer;
-        font-size: 0.8rem;
-    }
     .demo-notice {
         background-color: #fff3cd;
         border: 1px solid #ffeaa7;
@@ -43,12 +32,20 @@ st.markdown("""
         border-radius: 0.5rem;
         margin-bottom: 2rem;
     }
-    .task-row {
-        padding: 0.5rem;
-        margin: 0.2rem 0;
-        border-left: 3px solid #1f77b4;
-        background-color: #f8f9fa;
+    .gantt-bar {
+        height: 20px;
+        margin: 2px 0;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        padding: 0 8px;
+        font-size: 12px;
+        color: white;
+        font-weight: bold;
     }
+    .gantt-done { background-color: #2ca02c; }
+    .gantt-inprogress { background-color: #ff7f0e; }
+    .gantt-todo { background-color: #d62728; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -57,160 +54,84 @@ def get_visible_tickets(df, expanded_items):
     visible_tickets = []
     
     def add_ticket_and_children(ticket_id, level=0):
-        # Add the ticket itself
         ticket_row = df[df['ticket_id'] == ticket_id]
         if not ticket_row.empty:
             visible_tickets.append(ticket_id)
             
-            # If this ticket is expanded, add its children
             if ticket_id in expanded_items:
                 children = df[df['parent'].astype(str) == str(ticket_id)]
                 for _, child in children.iterrows():
                     add_ticket_and_children(child['ticket_id'], level + 1)
     
-    # Start with epics (tickets with no parent)
     epics = df[df['parent'] == '']
     for _, epic in epics.iterrows():
         add_ticket_and_children(epic['ticket_id'])
     
     return visible_tickets
 
-def create_gantt_chart(df_filtered):
-    """Create a Gantt chart using Matplotlib."""
+def create_simple_gantt_chart(df_filtered):
+    """Create a simple Gantt chart using Streamlit components."""
     if df_filtered.empty:
         st.warning("No data to display for Gantt chart.")
         return
     
-    # Prepare data for Gantt chart
-    tasks = []
-    start_dates = []
-    durations = []
-    colors = []
+    st.markdown("### 📊 Project Gantt Chart")
     
-    # Color mapping for status
-    color_map = {
-        'Done': '#2ca02c',      # Green
-        'In Progress': '#ff7f0e',  # Orange
-        'TO DO': '#d62728'      # Red
-    }
-    
+    # Find date range
+    all_dates = []
     for _, row in df_filtered.iterrows():
-        # Handle missing dates
+        start_date = row['start_date'] if not pd.isna(row['start_date']) else datetime.now()
+        due_date = row['due_date'] if not pd.isna(row['due_date']) else start_date + timedelta(days=30)
+        all_dates.extend([start_date, due_date])
+    
+    if not all_dates:
+        st.warning("No valid dates found for Gantt chart.")
+        return
+    
+    min_date = min(all_dates)
+    max_date = max(all_dates)
+    total_days = (max_date - min_date).days
+    
+    if total_days <= 0:
+        total_days = 30
+    
+    # Create Gantt chart
+    for _, row in df_filtered.iterrows():
         start_date = row['start_date'] if not pd.isna(row['start_date']) else datetime.now()
         due_date = row['due_date'] if not pd.isna(row['due_date']) else start_date + timedelta(days=30)
         
-        # Calculate duration in days
+        start_offset = (start_date - min_date).days
         duration = (due_date - start_date).days
+        
         if duration <= 0:
-            duration = 1  # Minimum 1 day
+            duration = 1
         
-        task_name = f"{row['ticket_id']} - {row['summary'][:40]}{'...' if len(row['summary']) > 40 else ''}"
+        left_percent = (start_offset / total_days) * 100
+        width_percent = (duration / total_days) * 100
         
-        tasks.append(task_name)
-        start_dates.append(start_date)
-        durations.append(duration)
-        colors.append(color_map.get(row['status'], '#1f77b4'))
-    
-    # Create the Gantt chart
-    fig, ax = plt.subplots(figsize=(12, max(6, len(tasks) * 0.5)))
-    
-    # Create horizontal bars
-    y_pos = range(len(tasks))
-    bars = ax.barh(y_pos, durations, left=start_dates, color=colors, alpha=0.7, height=0.6)
-    
-    # Customize the chart
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(tasks, fontsize=10)
-    ax.set_xlabel('Timeline', fontsize=12)
-    ax.set_title('Project Gantt Chart', fontsize=14, fontweight='bold')
-    
-    # Format x-axis dates
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-    ax.xaxis.set_major_locator(mdates.MonthLocator())
-    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
-    
-    # Add grid
-    ax.grid(True, alpha=0.3)
-    
-    # Create legend
-    legend_elements = [plt.Rectangle((0,0),1,1, facecolor=color, alpha=0.7, label=status) 
-                      for status, color in color_map.items()]
-    ax.legend(handles=legend_elements, loc='upper right')
-    
-    # Adjust layout
-    plt.tight_layout()
-    
-    # Display the chart
-    st.pyplot(fig)
-    plt.close()
-
-def create_timeline_view(df_filtered):
-    """Create a simple timeline view using Streamlit components."""
-    if df_filtered.empty:
-        st.warning("No data to display. Expand items in the navigation to see the timeline.")
-        return
-    
-    # Sort by hierarchy level and start date (handle NaT values)
-    df_sorted = df_filtered.sort_values(['hierarchy_level', 'start_date'], na_position='last')
-    
-    st.markdown("### 📅 Project Timeline")
-    
-    # Color mapping for different levels
-    level_colors = {
-        0: '#1f77b4',  # Epic - Blue
-        1: '#ff7f0e',  # Level 1 - Orange
-        2: '#2ca02c',  # Level 2 - Green
-        3: '#d62728',  # Level 3 - Red
-        4: '#9467bd'   # Level 4 - Purple
-    }
-    
-    for _, row in df_sorted.iterrows():
-        # Create indentation based on hierarchy level
-        indent = "  " * row['hierarchy_level']
+        status_class = {
+            'Done': 'gantt-done',
+            'In Progress': 'gantt-inprogress',
+            'TO DO': 'gantt-todo'
+        }.get(row['status'], 'gantt-todo')
         
-        # Status emoji
-        status_emoji = {"Done": "✅", "In Progress": "🔄", "TO DO": "📋"}.get(row['status'], "📋")
+        task_name = f"{row['ticket_id']} - {row['summary'][:30]}{'...' if len(row['summary']) > 30 else ''}"
         
-        # RAG status emoji
-        rag_emoji = {"Green": "🟢", "Amber": "🟡", "Red": "🔴"}.get(row['rag'], "⚪")
+        st.markdown(f"""
+        <div style="position: relative; width: 100%; height: 30px; background-color: #f0f0f0; margin: 5px 0; border-radius: 3px;">
+            <div class="gantt-bar {status_class}" style="position: absolute; left: {left_percent}%; width: {width_percent}%; height: 20px; top: 5px;">
+                {task_name}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Format dates - FIXED to handle None values
-        start_date = row['start_date'].strftime('%Y-%m-%d') if not pd.isna(row['start_date']) else 'No start date'
-        due_date = row['due_date'].strftime('%Y-%m-%d') if not pd.isna(row['due_date']) else 'No due date'
-        
-        # Calculate duration - FIXED to handle None values
-        if not pd.isna(row['due_date']) and not pd.isna(row['start_date']):
-            duration = (row['due_date'] - row['start_date']).days
-        else:
-            duration = 'N/A'
-        
-        # Create task display
-        with st.container():
-            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-            
-            with col1:
-                st.markdown(f"**{indent}{row['ticket_id']}** | {row['summary']}")
-            
-            with col2:
-                st.markdown(f"{status_emoji} {row['status']}")
-            
-            with col3:
-                st.markdown(f"{rag_emoji} {row['rag']}")
-            
-            with col4:
-                st.markdown(f"📅 {duration} days")
-            
-            # Date range
-            st.caption(f"{indent}📅 {start_date} → {due_date}")
-            
-            st.markdown("---")
+        st.caption(f"📅 {start_date.strftime('%Y-%m-%d')} → {due_date.strftime('%Y-%m-%d')} ({duration} days)")
 
 def format_date_column(series):
     """Format a datetime series to string, handling NaT values."""
     return series.apply(lambda x: x.strftime('%Y-%m-%d') if not pd.isna(x) else 'No date')
 
 def main():
-    # Demo notice
     st.markdown("""
     <div class="demo-notice">
         <h3>📋 Demo Version</h3>
@@ -219,10 +140,8 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Main header
     st.markdown('<h1 class="main-header">Customer 360 Dashboard</h1>', unsafe_allow_html=True)
     
-    # Load sample data
     try:
         df, summary_data = generate_sample_data()
         st.success(f"✅ Loaded {len(df)} sample tickets successfully!")
@@ -230,7 +149,6 @@ def main():
         st.error(f"❌ Error loading sample data: {str(e)}")
         return
     
-    # Initialize session state for expanded items
     if 'expanded_items' not in st.session_state:
         st.session_state.expanded_items = set()
     
@@ -238,20 +156,17 @@ def main():
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        total_tickets = len(df)
-        st.metric("Total Tickets", total_tickets)
+        st.metric("Total Tickets", len(df))
     
     with col2:
-        epics_count = len(df[df['parent'] == ''])
-        st.metric("Epics", epics_count)
+        st.metric("Epics", len(df[df['parent'] == '']))
     
     with col3:
-        status_counts = df['status'].value_counts()
-        completed = status_counts.get('Done', 0)
+        completed = len(df[df['status'] == 'Done'])
         st.metric("Completed", completed)
     
     with col4:
-        in_progress = status_counts.get('In Progress', 0)
+        in_progress = len(df[df['status'] == 'In Progress'])
         st.metric("In Progress", in_progress)
     
     # Status breakdown
@@ -265,20 +180,18 @@ def main():
             st.write(f"• {status}: {count}")
     
     with col2:
-        # RAG Status
         rag_summary = df['rag'].value_counts()
         st.write("**RAG Status:**")
         for rag, count in rag_summary.items():
             color = {'Green': '🟢', 'Amber': '🟡', 'Red': '🔴'}.get(rag, '⚪')
             st.write(f"• {color} {rag}: {count}")
     
-    # Create two columns for navigation and timeline
+    # Create navigation and timeline
     col1, col2 = st.columns([1, 3])
     
     with col1:
         st.subheader("🗂️ Project Navigation")
         
-        # Hierarchical navigation
         def render_hierarchy(parent_id='', level=0):
             if parent_id == '':
                 children = df[df['parent'] == '']
@@ -290,14 +203,10 @@ def main():
                 summary = child['summary']
                 status = child['status']
                 
-                # Check if this ticket has children
                 has_children = len(df[df['parent'].astype(str) == str(ticket_id)]) > 0
-                
-                # Create indentation
                 indent = "  " * level
                 
                 if has_children:
-                    # Expandable item
                     is_expanded = ticket_id in st.session_state.expanded_items
                     button_text = "▼" if is_expanded else "▶"
                     
@@ -314,11 +223,9 @@ def main():
                         status_emoji = {"Done": "✅", "In Progress": "🔄", "TO DO": "📋"}.get(status, "📋")
                         st.write(f"{indent}{status_emoji} **{ticket_id}** | {summary}")
                     
-                    # Show children if expanded
                     if is_expanded:
                         render_hierarchy(ticket_id, level + 1)
                 else:
-                    # Leaf item
                     status_emoji = {"Done": "✅", "In Progress": "🔄", "TO DO": "📋"}.get(status, "📋")
                     st.write(f"{indent}  {status_emoji} **{ticket_id}** | {summary}")
         
@@ -327,29 +234,47 @@ def main():
     with col2:
         st.subheader("📈 Project Timeline")
         
-        # Get visible tickets based on expanded items
         visible_ticket_ids = get_visible_tickets(df, st.session_state.expanded_items)
         df_filtered = df[df['ticket_id'].isin(visible_ticket_ids)]
         
         if not df_filtered.empty:
-            # Create and display timeline view
-            create_timeline_view(df_filtered)
+            # Show timeline
+            for _, row in df_filtered.iterrows():
+                indent = "  " * row.get('hierarchy_level', 0)
+                status_emoji = {"Done": "✅", "In Progress": "🔄", "TO DO": "📋"}.get(row['status'], "📋")
+                rag_emoji = {"Green": "🟢", "Amber": "🟡", "Red": "🔴"}.get(row['rag'], "⚪")
+                
+                start_date = row['start_date'].strftime('%Y-%m-%d') if not pd.isna(row['start_date']) else 'No start date'
+                due_date = row['due_date'].strftime('%Y-%m-%d') if not pd.isna(row['due_date']) else 'No due date'
+                
+                with st.container():
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                    
+                    with col1:
+                        st.markdown(f"**{indent}{row['ticket_id']}** | {row['summary']}")
+                    
+                    with col2:
+                        st.markdown(f"{status_emoji} {row['status']}")
+                    
+                    with col3:
+                        st.markdown(f"{rag_emoji} {row['rag']}")
+                    
+                    st.caption(f"{indent}📅 {start_date} → {due_date}")
+                    st.markdown("---")
         else:
             st.info("Expand items in the navigation to see the project timeline.")
     
-    # Gantt Chart Section
+    # Gantt Chart
     st.subheader("📊 Gantt Chart")
     if not df_filtered.empty:
-        create_gantt_chart(df_filtered)
+        create_simple_gantt_chart(df_filtered)
     else:
         st.info("Expand items in the navigation to see the Gantt chart.")
     
-    # Data table view
+    # Data table
     st.subheader("📋 Detailed View")
     if not df_filtered.empty:
-        # Show filtered data in a table
-        display_df = df_filtered[['ticket_id', 'summary', 'status', 'rag', 'start_date', 'due_date', 'hierarchy_level']].copy()
-        # Use custom function to format dates
+        display_df = df_filtered[['ticket_id', 'summary', 'status', 'rag', 'start_date', 'due_date']].copy()
         display_df['start_date'] = format_date_column(display_df['start_date'])
         display_df['due_date'] = format_date_column(display_df['due_date'])
         
