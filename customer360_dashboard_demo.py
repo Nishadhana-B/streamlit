@@ -104,13 +104,19 @@ def create_timeline_view(df_filtered):
         rag_emoji = {"Green": "🟢", "Amber": "🟡", "Red": "🔴"}.get(row['rag'], "⚪")
         
         # Format dates - FIXED to handle pandas NaT values properly
-        start_date = row['start_date'].strftime('%Y-%m-%d')
+        try:
+            start_date = row['start_date'].strftime('%Y-%m-%d') if pd.notna(row['start_date']) else 'No start date'
+        except (AttributeError, TypeError, ValueError):
+            start_date = 'No start date'
         
         # Handle due_date more carefully
         try:
             if pd.notna(row['due_date']) and row['due_date'] is not None:
                 due_date = row['due_date'].strftime('%Y-%m-%d')
-                duration = (row['due_date'] - row['start_date']).days
+                if pd.notna(row['start_date']):
+                    duration = (row['due_date'] - row['start_date']).days
+                else:
+                    duration = 'N/A'
             else:
                 due_date = 'No due date'
                 duration = 'N/A'
@@ -270,10 +276,19 @@ def main():
     # Data table view
     st.subheader("📋 Detailed View")
     if not df_filtered.empty:
-        # Show filtered data in a table - FIXED column name and NaT handling
+        # Show filtered data in a table - FIXED to handle NaT values properly
         display_df = df_filtered[['ticket_id', 'summary', 'status', 'rag', 'start_date', 'due_date', 'hierarchy_level']].copy()
-        display_df['start_date'] = display_df['start_date'].dt.strftime('%Y-%m-%d')
-        display_df['due_date'] = display_df['due_date'].dt.strftime('%Y-%m-%d', na_rep='No due date')
+        
+        # Handle NaT values in both start_date and due_date
+        try:
+            display_df['start_date'] = display_df['start_date'].dt.strftime('%Y-%m-%d', na_rep='No start date')
+        except:
+            display_df['start_date'] = display_df['start_date'].astype(str).replace('NaT', 'No start date')
+        
+        try:
+            display_df['due_date'] = display_df['due_date'].dt.strftime('%Y-%m-%d', na_rep='No due date')
+        except:
+            display_df['due_date'] = display_df['due_date'].astype(str).replace('NaT', 'No due date')
         
         st.dataframe(display_df, use_container_width=True)
     else:
