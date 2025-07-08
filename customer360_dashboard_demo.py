@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 from sample_data import generate_sample_data
 
@@ -76,57 +76,73 @@ def get_visible_tickets(df, expanded_items):
     return visible_tickets
 
 def create_gantt_chart(df_filtered):
-    """Create a Gantt chart using Plotly."""
+    """Create a Gantt chart using Matplotlib."""
     if df_filtered.empty:
         st.warning("No data to display for Gantt chart.")
         return
     
     # Prepare data for Gantt chart
-    gantt_data = []
+    tasks = []
+    start_dates = []
+    durations = []
+    colors = []
+    
+    # Color mapping for status
+    color_map = {
+        'Done': '#2ca02c',      # Green
+        'In Progress': '#ff7f0e',  # Orange
+        'TO DO': '#d62728'      # Red
+    }
     
     for _, row in df_filtered.iterrows():
         # Handle missing dates
         start_date = row['start_date'] if not pd.isna(row['start_date']) else datetime.now()
         due_date = row['due_date'] if not pd.isna(row['due_date']) else start_date + timedelta(days=30)
         
-        # Color based on status
-        color_map = {
-            'Done': '#2ca02c',      # Green
-            'In Progress': '#ff7f0e',  # Orange
-            'TO DO': '#d62728'      # Red
-        }
+        # Calculate duration in days
+        duration = (due_date - start_date).days
+        if duration <= 0:
+            duration = 1  # Minimum 1 day
         
-        gantt_data.append({
-            'Task': f"{row['ticket_id']} - {row['summary'][:50]}{'...' if len(row['summary']) > 50 else ''}",
-            'Start': start_date,
-            'Finish': due_date,
-            'Status': row['status'],
-            'Color': color_map.get(row['status'], '#1f77b4')
-        })
+        task_name = f"{row['ticket_id']} - {row['summary'][:40]}{'...' if len(row['summary']) > 40 else ''}"
+        
+        tasks.append(task_name)
+        start_dates.append(start_date)
+        durations.append(duration)
+        colors.append(color_map.get(row['status'], '#1f77b4'))
     
-    # Create Gantt chart
-    fig = px.timeline(
-        gantt_data,
-        x_start="Start",
-        x_end="Finish",
-        y="Task",
-        color="Status",
-        title="Project Gantt Chart",
-        color_discrete_map={
-            'Done': '#2ca02c',
-            'In Progress': '#ff7f0e',
-            'TO DO': '#d62728'
-        }
-    )
+    # Create the Gantt chart
+    fig, ax = plt.subplots(figsize=(12, max(6, len(tasks) * 0.5)))
     
-    fig.update_layout(
-        height=max(400, len(gantt_data) * 30),
-        xaxis_title="Timeline",
-        yaxis_title="Tasks",
-        showlegend=True
-    )
+    # Create horizontal bars
+    y_pos = range(len(tasks))
+    bars = ax.barh(y_pos, durations, left=start_dates, color=colors, alpha=0.7, height=0.6)
     
-    st.plotly_chart(fig, use_container_width=True)
+    # Customize the chart
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(tasks, fontsize=10)
+    ax.set_xlabel('Timeline', fontsize=12)
+    ax.set_title('Project Gantt Chart', fontsize=14, fontweight='bold')
+    
+    # Format x-axis dates
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    # Add grid
+    ax.grid(True, alpha=0.3)
+    
+    # Create legend
+    legend_elements = [plt.Rectangle((0,0),1,1, facecolor=color, alpha=0.7, label=status) 
+                      for status, color in color_map.items()]
+    ax.legend(handles=legend_elements, loc='upper right')
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Display the chart
+    st.pyplot(fig)
+    plt.close()
 
 def create_timeline_view(df_filtered):
     """Create a simple timeline view using Streamlit components."""
