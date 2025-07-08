@@ -32,20 +32,76 @@ st.markdown("""
         border-radius: 0.5rem;
         margin-bottom: 2rem;
     }
+    .gantt-container {
+        background-color: white;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 10px;
+        margin: 10px 0;
+    }
+    .gantt-row {
+        display: flex;
+        align-items: center;
+        margin: 3px 0;
+        padding: 2px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .gantt-task-name {
+        width: 300px;
+        font-size: 12px;
+        padding: 5px;
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .gantt-timeline {
+        flex: 1;
+        height: 25px;
+        position: relative;
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+    }
     .gantt-bar {
+        position: absolute;
         height: 20px;
-        margin: 2px 0;
+        top: 2px;
         border-radius: 3px;
         display: flex;
         align-items: center;
-        padding: 0 8px;
-        font-size: 12px;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: bold;
         color: white;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
+        min-width: 2px;
+    }
+    .gantt-done { background-color: #28a745; }
+    .gantt-inprogress { background-color: #ffc107; color: black; }
+    .gantt-todo { background-color: #dc3545; }
+    .task-level-0 { font-weight: bold; color: #0052CC; }
+    .task-level-1 { padding-left: 20px; color: #2E7D32; }
+    .task-level-2 { padding-left: 40px; color: #1976D2; }
+    .task-level-3 { padding-left: 60px; color: #F57C00; }
+    .gantt-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+        padding: 5px 0;
+        border-bottom: 2px solid #ddd;
         font-weight: bold;
     }
-    .gantt-done { background-color: #2ca02c; }
-    .gantt-inprogress { background-color: #ff7f0e; }
-    .gantt-todo { background-color: #d62728; }
+    .gantt-task-header {
+        width: 300px;
+        padding: 5px;
+    }
+    .gantt-timeline-header {
+        flex: 1;
+        text-align: center;
+        padding: 5px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -69,17 +125,42 @@ def get_visible_tickets(df, expanded_items):
     
     return visible_tickets
 
-def create_simple_gantt_chart(df_filtered):
-    """Create a simple Gantt chart using Streamlit components."""
+def build_hierarchy_tree(df):
+    """Build hierarchy tree with proper levels."""
+    df_with_hierarchy = df.copy()
+    df_with_hierarchy['hierarchy_level'] = 0
+    
+    def set_hierarchy_level(parent_id, level):
+        children = df_with_hierarchy[df_with_hierarchy['parent'].astype(str) == str(parent_id)]
+        for idx, child in children.iterrows():
+            df_with_hierarchy.at[idx, 'hierarchy_level'] = level
+            set_hierarchy_level(child['ticket_id'], level + 1)
+    
+    # Set hierarchy levels starting from epics (level 0)
+    epics = df_with_hierarchy[df_with_hierarchy['parent'] == '']
+    for _, epic in epics.iterrows():
+        set_hierarchy_level(epic['ticket_id'], 1)
+    
+    return df_with_hierarchy
+
+def create_professional_gantt_chart(df_filtered):
+    """Create a professional Gantt chart matching the image format."""
     if df_filtered.empty:
         st.warning("No data to display for Gantt chart.")
         return
     
-    st.markdown("### 📊 Project Gantt Chart")
+    st.markdown("### 📊 Gantt Chart")
+    st.markdown(f"Displaying {len(df_filtered)} tickets based on navigation")
+    
+    # Build hierarchy
+    df_hierarchy = build_hierarchy_tree(df_filtered)
+    
+    # Sort by hierarchy and natural order
+    df_sorted = df_hierarchy.sort_values(['hierarchy_level', 'ticket_id']).reset_index(drop=True)
     
     # Find date range
     all_dates = []
-    for _, row in df_filtered.iterrows():
+    for _, row in df_sorted.iterrows():
         start_date = row['start_date'] if not pd.isna(row['start_date']) else datetime.now()
         due_date = row['due_date'] if not pd.isna(row['due_date']) else start_date + timedelta(days=30)
         all_dates.extend([start_date, due_date])
@@ -95,8 +176,17 @@ def create_simple_gantt_chart(df_filtered):
     if total_days <= 0:
         total_days = 30
     
-    # Create Gantt chart
-    for _, row in df_filtered.iterrows():
+    # Create Gantt chart container
+    gantt_html = f"""
+    <div class="gantt-container">
+        <div class="gantt-header">
+            <div class="gantt-task-header">Task Name</div>
+            <div class="gantt-timeline-header">Timeline ({min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')})</div>
+        </div>
+    """
+    
+    # Create rows for each task
+    for _, row in df_sorted.iterrows():
         start_date = row['start_date'] if not pd.isna(row['start_date']) else datetime.now()
         due_date = row['due_date'] if not pd.isna(row['due_date']) else start_date + timedelta(days=30)
         
@@ -109,23 +199,51 @@ def create_simple_gantt_chart(df_filtered):
         left_percent = (start_offset / total_days) * 100
         width_percent = (duration / total_days) * 100
         
+        # Ensure minimum width for visibility
+        if width_percent < 1:
+            width_percent = 1
+        
         status_class = {
             'Done': 'gantt-done',
             'In Progress': 'gantt-inprogress',
             'TO DO': 'gantt-todo'
         }.get(row['status'], 'gantt-todo')
         
-        task_name = f"{row['ticket_id']} - {row['summary'][:30]}{'...' if len(row['summary']) > 30 else ''}"
+        # Task name with hierarchy
+        level = row.get('hierarchy_level', 0)
+        task_class = f"task-level-{min(level, 3)}"
         
-        st.markdown(f"""
-        <div style="position: relative; width: 100%; height: 30px; background-color: #f0f0f0; margin: 5px 0; border-radius: 3px;">
-            <div class="gantt-bar {status_class}" style="position: absolute; left: {left_percent}%; width: {width_percent}%; height: 20px; top: 5px;">
-                {task_name}
+        # Format task name based on hierarchy
+        if level == 0:
+            task_display = f"▶ {row['ticket_id']} | {row['summary'][:40]}"
+        else:
+            indent = "  " * level
+            task_display = f"{indent}{row['ticket_id']} | {row['summary'][:35]}"
+        
+        # Bar content (show ticket ID if bar is wide enough)
+        bar_content = row['ticket_id'] if width_percent > 5 else ""
+        
+        gantt_html += f"""
+        <div class="gantt-row">
+            <div class="gantt-task-name {task_class}" title="{row['summary']}">{task_display}</div>
+            <div class="gantt-timeline">
+                <div class="gantt-bar {status_class}" 
+                     style="left: {left_percent}%; width: {width_percent}%;"
+                     title="{row['ticket_id']}: {start_date.strftime('%Y-%m-%d')} to {due_date.strftime('%Y-%m-%d')} ({duration} days)">
+                    {bar_content}
+                </div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
-        
-        st.caption(f"📅 {start_date.strftime('%Y-%m-%d')} → {due_date.strftime('%Y-%m-%d')} ({duration} days)")
+        """
+    
+    gantt_html += "</div>"
+    
+    st.markdown(gantt_html, unsafe_allow_html=True)
+    
+    # Add legend
+    st.markdown("""
+    **Legend:** 🟢 Done | 🟡 In Progress | 🔴 To Do
+    """)
 
 def format_date_column(series):
     """Format a datetime series to string, handling NaT values."""
@@ -186,11 +304,11 @@ def main():
             color = {'Green': '🟢', 'Amber': '🟡', 'Red': '🔴'}.get(rag, '⚪')
             st.write(f"• {color} {rag}: {count}")
     
-    # Create navigation and timeline
+    # Create navigation and Gantt chart
     col1, col2 = st.columns([1, 3])
     
     with col1:
-        st.subheader("🗂️ Project Navigation")
+        st.subheader("🗂️ Ticket Navigation")
         
         def render_hierarchy(parent_id='', level=0):
             if parent_id == '':
@@ -230,46 +348,27 @@ def main():
                     st.write(f"{indent}  {status_emoji} **{ticket_id}** | {summary}")
         
         render_hierarchy()
+        
+        # Add expand/collapse all buttons
+        col_exp, col_col = st.columns(2)
+        with col_exp:
+            if st.button("🔽 Expand All"):
+                parent_ids = set(df['parent'].dropna().unique())
+                st.session_state.expanded_items = set(df[df['ticket_id'].isin(parent_ids)]['ticket_id'].tolist())
+                st.rerun()
+        
+        with col_col:
+            if st.button("🔼 Collapse All"):
+                st.session_state.expanded_items = set()
+                st.rerun()
     
     with col2:
-        st.subheader("📈 Project Timeline")
-        
+        # Get visible tickets based on expanded items
         visible_ticket_ids = get_visible_tickets(df, st.session_state.expanded_items)
         df_filtered = df[df['ticket_id'].isin(visible_ticket_ids)]
         
-        if not df_filtered.empty:
-            # Show timeline
-            for _, row in df_filtered.iterrows():
-                indent = "  " * row.get('hierarchy_level', 0)
-                status_emoji = {"Done": "✅", "In Progress": "🔄", "TO DO": "📋"}.get(row['status'], "📋")
-                rag_emoji = {"Green": "🟢", "Amber": "🟡", "Red": "🔴"}.get(row['rag'], "⚪")
-                
-                start_date = row['start_date'].strftime('%Y-%m-%d') if not pd.isna(row['start_date']) else 'No start date'
-                due_date = row['due_date'].strftime('%Y-%m-%d') if not pd.isna(row['due_date']) else 'No due date'
-                
-                with st.container():
-                    col1, col2, col3 = st.columns([3, 1, 1])
-                    
-                    with col1:
-                        st.markdown(f"**{indent}{row['ticket_id']}** | {row['summary']}")
-                    
-                    with col2:
-                        st.markdown(f"{status_emoji} {row['status']}")
-                    
-                    with col3:
-                        st.markdown(f"{rag_emoji} {row['rag']}")
-                    
-                    st.caption(f"{indent}📅 {start_date} → {due_date}")
-                    st.markdown("---")
-        else:
-            st.info("Expand items in the navigation to see the project timeline.")
-    
-    # Gantt Chart
-    st.subheader("📊 Gantt Chart")
-    if not df_filtered.empty:
-        create_simple_gantt_chart(df_filtered)
-    else:
-        st.info("Expand items in the navigation to see the Gantt chart.")
+        # Professional Gantt Chart
+        create_professional_gantt_chart(df_filtered)
     
     # Data table
     st.subheader("📋 Detailed View")
