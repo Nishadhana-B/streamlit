@@ -32,117 +32,6 @@ st.markdown("""
         border-radius: 0.5rem;
         margin-bottom: 2rem;
     }
-    .gantt-container {
-        background-color: white;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        padding: 15px;
-        margin: 10px 0;
-        font-family: Arial, sans-serif;
-    }
-    .gantt-header {
-        display: flex;
-        align-items: center;
-        margin-bottom: 15px;
-        padding: 10px 0;
-        border-bottom: 2px solid #ddd;
-        font-weight: bold;
-        font-size: 14px;
-        background-color: #f8f9fa;
-    }
-    .gantt-task-header {
-        width: 350px;
-        padding: 8px;
-        color: #333;
-    }
-    .gantt-timeline-header {
-        flex: 1;
-        text-align: center;
-        padding: 8px;
-        color: #333;
-    }
-    .gantt-row {
-        display: flex;
-        align-items: center;
-        margin: 5px 0;
-        padding: 4px 0;
-        border-bottom: 1px solid #f0f0f0;
-        min-height: 30px;
-    }
-    .gantt-task-name {
-        width: 350px;
-        font-size: 13px;
-        padding: 6px 8px;
-        text-align: left;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        background-color: #f8f9fa;
-        border-right: 1px solid #ddd;
-    }
-    .gantt-timeline {
-        flex: 1;
-        height: 28px;
-        position: relative;
-        background-color: #ffffff;
-        border: 1px solid #e9ecef;
-        margin-left: 5px;
-    }
-    .gantt-bar {
-        position: absolute;
-        height: 24px;
-        top: 2px;
-        background-color: #1f77b4 !important;
-        border-radius: 3px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        font-weight: bold;
-        color: white !important;
-        text-overflow: ellipsis;
-        overflow: hidden;
-        white-space: nowrap;
-        min-width: 3px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
-    .gantt-timeline-footer {
-        display: flex;
-        align-items: center;
-        margin-top: 10px;
-        padding: 10px 0;
-        border-top: 1px solid #ddd;
-        font-size: 12px;
-        color: #666;
-    }
-    .gantt-timeline-axis {
-        flex: 1;
-        height: 40px;
-        position: relative;
-        background-color: #f8f9fa;
-        border: 1px solid #e9ecef;
-        margin-left: 5px;
-    }
-    .task-level-0 { 
-        font-weight: bold; 
-        color: #0052CC; 
-        background-color: #e3f2fd;
-    }
-    .task-level-1 { 
-        padding-left: 20px; 
-        color: #2E7D32; 
-        background-color: #f1f8e9;
-    }
-    .task-level-2 { 
-        padding-left: 40px; 
-        color: #1976D2; 
-        background-color: #e8f5e8;
-    }
-    .task-level-3 { 
-        padding-left: 60px; 
-        color: #F57C00; 
-        background-color: #fff8e1;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -185,7 +74,7 @@ def build_hierarchy_tree(df):
     return df_with_hierarchy
 
 def create_professional_gantt_chart(df_filtered):
-    """Create a professional Gantt chart with blue bars and bottom timeline."""
+    """Create a professional Gantt chart with blue bars and properly aligned timeline."""
     if df_filtered.empty:
         st.warning("No data to display for Gantt chart.")
         return
@@ -249,12 +138,12 @@ def create_professional_gantt_chart(df_filtered):
     
     time_markers = generate_time_markers(min_date, max_date, total_days)
     
-    # Create header (no time axis row)
+    # Create container with header
     st.markdown(f"""
-    <div class="gantt-container">
-        <div class="gantt-header">
-            <div class="gantt-task-header">Task Name</div>
-            <div class="gantt-timeline-header">Timeline ({min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')})</div>
+    <div style="background-color: white; border: 1px solid #ddd; border-radius: 5px; padding: 15px; margin: 10px 0; font-family: Arial, sans-serif;">
+        <div style="display: flex; align-items: center; margin-bottom: 15px; padding: 10px 0; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 14px; background-color: #f8f9fa;">
+            <div style="width: 350px; padding: 8px; color: #333;">Task Name</div>
+            <div style="flex: 1; text-align: center; padding: 8px; color: #333;">Timeline ({min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')})</div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -280,16 +169,22 @@ def create_professional_gantt_chart(df_filtered):
         if left_percent + width_percent > 100:
             width_percent = 100 - left_percent
         
-        # Task name with hierarchy
+        # Task name with hierarchy - no CSS classes
         level = row.get('hierarchy_level', 0)
-        task_class = f"task-level-{min(level, 3)}"
         
-        # Format task name based on hierarchy
+        # Format task name based on hierarchy with inline styles
         if level == 0:
             task_display = f"▶ {row['ticket_id']} | {row['summary'][:35]}"
+            task_style = "font-weight: bold; color: #0052CC; background-color: #e3f2fd;"
+        elif level == 1:
+            task_display = f"  {row['ticket_id']} | {row['summary'][:30]}"
+            task_style = "padding-left: 20px; color: #2E7D32; background-color: #f1f8e9;"
+        elif level == 2:
+            task_display = f"    {row['ticket_id']} | {row['summary'][:30]}"
+            task_style = "padding-left: 40px; color: #1976D2; background-color: #e8f5e8;"
         else:
-            indent = "  " * level
-            task_display = f"{indent}{row['ticket_id']} | {row['summary'][:30]}"
+            task_display = f"      {row['ticket_id']} | {row['summary'][:30]}"
+            task_style = "padding-left: 60px; color: #F57C00; background-color: #fff8e1;"
         
         # Bar content - show ticket ID only if bar is wide enough
         if width_percent > 10:
@@ -299,16 +194,12 @@ def create_professional_gantt_chart(df_filtered):
         else:
             bar_content = ""
         
-        # Create individual row with guaranteed blue bar - force blue color
+        # Create individual row with guaranteed blue bar - NO CSS CLASSES
         st.markdown(f"""
-        <div class="gantt-row">
-            <div class="gantt-task-name {task_class}" title="{row['summary']}">{task_display}</div>
-            <div class="gantt-timeline">
-                <div style="position: absolute; height: 24px; top: 2px; left: {left_percent}%; width: {width_percent}%; 
-                           background-color: #1f77b4; border-radius: 3px; display: flex; align-items: center; 
-                           justify-content: center; font-size: 11px; font-weight: bold; color: white; 
-                           text-overflow: ellipsis; overflow: hidden; white-space: nowrap; min-width: 3px; 
-                           box-shadow: 0 1px 3px rgba(0,0,0,0.2);"
+        <div style="display: flex; align-items: center; margin: 5px 0; padding: 4px 0; border-bottom: 1px solid #f0f0f0; min-height: 30px;">
+            <div style="width: 350px; font-size: 13px; padding: 6px 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: #f8f9fa; border-right: 1px solid #ddd; {task_style}" title="{row['summary']}">{task_display}</div>
+            <div style="flex: 1; height: 28px; position: relative; background-color: #ffffff; border: 1px solid #e9ecef; margin-left: 5px;">
+                <div style="position: absolute; height: 24px; top: 2px; left: {left_percent}%; width: {width_percent}%; background-color: #1f77b4; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; color: white; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; min-width: 3px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"
                      title="{row['ticket_id']}: {start_date.strftime('%Y-%m-%d')} to {due_date.strftime('%Y-%m-%d')} ({duration} days)">
                     {bar_content}
                 </div>
@@ -316,18 +207,18 @@ def create_professional_gantt_chart(df_filtered):
         </div>
         """, unsafe_allow_html=True)
     
-    # Add timeline at the bottom - straight alignment
+    # Add timeline at the bottom - aligned with the timeline area only (not task names)
     st.markdown(f"""
         <div style="display: flex; align-items: center; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px;">
-            <div style="width: 350px; font-weight: bold; padding: 8px; font-size: 14px;">Timeline</div>
+            <div style="width: 350px; font-weight: bold; padding: 8px; font-size: 14px; border-right: 1px solid #ddd;">Timeline</div>
             <div style="flex: 1; height: 50px; position: relative; background-color: #f8f9fa; border: 1px solid #e9ecef; margin-left: 5px;">
     """, unsafe_allow_html=True)
     
-    # Add time markers at bottom - straight vertical lines
+    # Add time markers aligned with the timeline area
     for marker in time_markers:
         st.markdown(f"""
-                <div style="position: absolute; left: {marker['position']}%; top: 0; width: 1px; height: 50px; background-color: #333; border-left: 1px solid #333;">
-                    <div style="position: absolute; top: 30px; left: -40px; font-size: 10px; color: #333; white-space: nowrap; width: 80px; text-align: center;">
+                <div style="position: absolute; left: {marker['position']}%; top: 0; width: 2px; height: 50px; background-color: #333;">
+                    <div style="position: absolute; top: 25px; left: -40px; font-size: 10px; color: #333; white-space: nowrap; width: 80px; text-align: center;">
                         {marker['label']}
                     </div>
                 </div>
