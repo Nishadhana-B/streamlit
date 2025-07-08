@@ -36,71 +36,95 @@ st.markdown("""
         background-color: white;
         border: 1px solid #ddd;
         border-radius: 5px;
-        padding: 10px;
+        padding: 15px;
         margin: 10px 0;
+        font-family: Arial, sans-serif;
+    }
+    .gantt-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 15px;
+        padding: 10px 0;
+        border-bottom: 2px solid #ddd;
+        font-weight: bold;
+        font-size: 14px;
+        background-color: #f8f9fa;
+    }
+    .gantt-task-header {
+        width: 350px;
+        padding: 8px;
+        color: #333;
+    }
+    .gantt-timeline-header {
+        flex: 1;
+        text-align: center;
+        padding: 8px;
+        color: #333;
     }
     .gantt-row {
         display: flex;
         align-items: center;
-        margin: 3px 0;
-        padding: 2px 0;
+        margin: 5px 0;
+        padding: 4px 0;
         border-bottom: 1px solid #f0f0f0;
+        min-height: 30px;
     }
     .gantt-task-name {
-        width: 300px;
-        font-size: 12px;
-        padding: 5px;
+        width: 350px;
+        font-size: 13px;
+        padding: 6px 8px;
         text-align: left;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        background-color: #f8f9fa;
+        border-right: 1px solid #ddd;
     }
     .gantt-timeline {
         flex: 1;
-        height: 25px;
+        height: 28px;
         position: relative;
-        background-color: #f8f9fa;
+        background-color: #ffffff;
         border: 1px solid #e9ecef;
+        margin-left: 5px;
     }
     .gantt-bar {
         position: absolute;
-        height: 20px;
+        height: 24px;
         top: 2px;
+        background-color: #1f77b4;
         border-radius: 3px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 10px;
+        font-size: 11px;
         font-weight: bold;
         color: white;
         text-overflow: ellipsis;
         overflow: hidden;
         white-space: nowrap;
-        min-width: 2px;
+        min-width: 3px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     }
-    .gantt-done { background-color: #28a745; }
-    .gantt-inprogress { background-color: #ffc107; color: black; }
-    .gantt-todo { background-color: #dc3545; }
-    .task-level-0 { font-weight: bold; color: #0052CC; }
-    .task-level-1 { padding-left: 20px; color: #2E7D32; }
-    .task-level-2 { padding-left: 40px; color: #1976D2; }
-    .task-level-3 { padding-left: 60px; color: #F57C00; }
-    .gantt-header {
-        display: flex;
-        align-items: center;
-        margin-bottom: 10px;
-        padding: 5px 0;
-        border-bottom: 2px solid #ddd;
-        font-weight: bold;
+    .task-level-0 { 
+        font-weight: bold; 
+        color: #0052CC; 
+        background-color: #e3f2fd;
     }
-    .gantt-task-header {
-        width: 300px;
-        padding: 5px;
+    .task-level-1 { 
+        padding-left: 20px; 
+        color: #2E7D32; 
+        background-color: #f1f8e9;
     }
-    .gantt-timeline-header {
-        flex: 1;
-        text-align: center;
-        padding: 5px;
+    .task-level-2 { 
+        padding-left: 40px; 
+        color: #1976D2; 
+        background-color: #e8f5e8;
+    }
+    .task-level-3 { 
+        padding-left: 60px; 
+        color: #F57C00; 
+        background-color: #fff8e1;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -144,7 +168,7 @@ def build_hierarchy_tree(df):
     return df_with_hierarchy
 
 def create_professional_gantt_chart(df_filtered):
-    """Create a professional Gantt chart matching the image format."""
+    """Create a professional Gantt chart with blue bars."""
     if df_filtered.empty:
         st.warning("No data to display for Gantt chart.")
         return
@@ -176,14 +200,14 @@ def create_professional_gantt_chart(df_filtered):
     if total_days <= 0:
         total_days = 30
     
-    # Create Gantt chart container
-    gantt_html = f"""
+    # Create header
+    st.markdown(f"""
     <div class="gantt-container">
         <div class="gantt-header">
             <div class="gantt-task-header">Task Name</div>
             <div class="gantt-timeline-header">Timeline ({min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')})</div>
         </div>
-    """
+    """, unsafe_allow_html=True)
     
     # Create rows for each task
     for _, row in df_sorted.iterrows():
@@ -200,14 +224,8 @@ def create_professional_gantt_chart(df_filtered):
         width_percent = (duration / total_days) * 100
         
         # Ensure minimum width for visibility
-        if width_percent < 1:
-            width_percent = 1
-        
-        status_class = {
-            'Done': 'gantt-done',
-            'In Progress': 'gantt-inprogress',
-            'TO DO': 'gantt-todo'
-        }.get(row['status'], 'gantt-todo')
+        if width_percent < 2:
+            width_percent = 2
         
         # Task name with hierarchy
         level = row.get('hierarchy_level', 0)
@@ -215,35 +233,33 @@ def create_professional_gantt_chart(df_filtered):
         
         # Format task name based on hierarchy
         if level == 0:
-            task_display = f"▶ {row['ticket_id']} | {row['summary'][:40]}"
+            task_display = f"▶ {row['ticket_id']} | {row['summary'][:35]}"
         else:
             indent = "  " * level
-            task_display = f"{indent}{row['ticket_id']} | {row['summary'][:35]}"
+            task_display = f"{indent}{row['ticket_id']} | {row['summary'][:30]}"
         
         # Bar content (show ticket ID if bar is wide enough)
-        bar_content = row['ticket_id'] if width_percent > 5 else ""
+        bar_content = row['ticket_id'] if width_percent > 8 else ""
         
-        gantt_html += f"""
+        # Create individual row
+        st.markdown(f"""
         <div class="gantt-row">
             <div class="gantt-task-name {task_class}" title="{row['summary']}">{task_display}</div>
             <div class="gantt-timeline">
-                <div class="gantt-bar {status_class}" 
+                <div class="gantt-bar" 
                      style="left: {left_percent}%; width: {width_percent}%;"
                      title="{row['ticket_id']}: {start_date.strftime('%Y-%m-%d')} to {due_date.strftime('%Y-%m-%d')} ({duration} days)">
                     {bar_content}
                 </div>
             </div>
         </div>
-        """
+        """, unsafe_allow_html=True)
     
-    gantt_html += "</div>"
+    # Close container
+    st.markdown("</div>", unsafe_allow_html=True)
     
-    st.markdown(gantt_html, unsafe_allow_html=True)
-    
-    # Add legend
-    st.markdown("""
-    **Legend:** 🟢 Done | 🟡 In Progress | 🔴 To Do
-    """)
+    # Add status info
+    st.markdown("**📊 All bars are blue representing project timeline**")
 
 def format_date_column(series):
     """Format a datetime series to string, handling NaT values."""
