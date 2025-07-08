@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for Streamlit Cloud
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from datetime import datetime, timedelta
