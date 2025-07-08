@@ -168,7 +168,7 @@ def build_hierarchy_tree(df):
     return df_with_hierarchy
 
 def create_professional_gantt_chart(df_filtered):
-    """Create a professional Gantt chart with blue bars."""
+    """Create a professional Gantt chart with blue bars and time axis."""
     if df_filtered.empty:
         st.warning("No data to display for Gantt chart.")
         return
@@ -200,12 +200,69 @@ def create_professional_gantt_chart(df_filtered):
     if total_days <= 0:
         total_days = 30
     
-    # Create header
+    # Create time axis markers
+    def generate_time_markers(min_date, max_date, total_days):
+        """Generate time markers for the x-axis."""
+        markers = []
+        
+        # Determine appropriate interval based on total duration
+        if total_days <= 30:
+            # Daily markers for short periods
+            interval_days = 7
+        elif total_days <= 90:
+            # Weekly markers for medium periods
+            interval_days = 14
+        elif total_days <= 365:
+            # Monthly markers for longer periods
+            interval_days = 30
+        else:
+            # Quarterly markers for very long periods
+            interval_days = 90
+        
+        current_date = min_date
+        while current_date <= max_date:
+            offset_days = (current_date - min_date).days
+            position_percent = (offset_days / total_days) * 100
+            
+            markers.append({
+                'date': current_date,
+                'position': position_percent,
+                'label': current_date.strftime('%m/%d')
+            })
+            
+            current_date += timedelta(days=interval_days)
+        
+        return markers
+    
+    time_markers = generate_time_markers(min_date, max_date, total_days)
+    
+    # Create header with time axis
     st.markdown(f"""
     <div class="gantt-container">
         <div class="gantt-header">
             <div class="gantt-task-header">Task Name</div>
             <div class="gantt-timeline-header">Timeline ({min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')})</div>
+        </div>
+        <div class="gantt-row">
+            <div class="gantt-task-name" style="background-color: #f8f9fa; font-weight: bold;">Time Axis</div>
+            <div class="gantt-timeline" style="height: 40px; background-color: #f8f9fa;">
+    """, unsafe_allow_html=True)
+    
+    # Add time markers
+    for marker in time_markers:
+        st.markdown(f"""
+                <div style="position: absolute; left: {marker['position']}%; top: 0; 
+                           width: 1px; height: 40px; background-color: #666; 
+                           border-left: 1px solid #666;">
+                    <div style="position: absolute; top: 25px; left: -15px; 
+                               font-size: 10px; color: #666; white-space: nowrap;">
+                        {marker['label']}
+                    </div>
+                </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("""
+            </div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -223,9 +280,13 @@ def create_professional_gantt_chart(df_filtered):
         left_percent = (start_offset / total_days) * 100
         width_percent = (duration / total_days) * 100
         
-        # Ensure minimum width for visibility
-        if width_percent < 2:
-            width_percent = 2
+        # Ensure minimum width for visibility and prevent white bars
+        if width_percent < 3:
+            width_percent = 3
+        
+        # Ensure bars don't go beyond 100%
+        if left_percent + width_percent > 100:
+            width_percent = 100 - left_percent
         
         # Task name with hierarchy
         level = row.get('hierarchy_level', 0)
@@ -238,16 +299,21 @@ def create_professional_gantt_chart(df_filtered):
             indent = "  " * level
             task_display = f"{indent}{row['ticket_id']} | {row['summary'][:30]}"
         
-        # Bar content (show ticket ID if bar is wide enough)
-        bar_content = row['ticket_id'] if width_percent > 8 else ""
+        # Bar content - only show ticket ID if bar is wide enough, otherwise empty
+        if width_percent > 12:
+            bar_content = row['ticket_id']
+        elif width_percent > 8:
+            bar_content = row['ticket_id'][:4]
+        else:
+            bar_content = ""
         
-        # Create individual row
+        # Create individual row with proper blue bar
         st.markdown(f"""
         <div class="gantt-row">
             <div class="gantt-task-name {task_class}" title="{row['summary']}">{task_display}</div>
             <div class="gantt-timeline">
                 <div class="gantt-bar" 
-                     style="left: {left_percent}%; width: {width_percent}%;"
+                     style="left: {left_percent}%; width: {width_percent}%; background-color: #1f77b4 !important;"
                      title="{row['ticket_id']}: {start_date.strftime('%Y-%m-%d')} to {due_date.strftime('%Y-%m-%d')} ({duration} days)">
                     {bar_content}
                 </div>
@@ -259,7 +325,7 @@ def create_professional_gantt_chart(df_filtered):
     st.markdown("</div>", unsafe_allow_html=True)
     
     # Add status info
-    st.markdown("**📊 All bars are blue representing project timeline**")
+    st.markdown("**📊 All bars are blue representing project timeline with time axis markers**")
 
 def format_date_column(series):
     """Format a datetime series to string, handling NaT values."""
