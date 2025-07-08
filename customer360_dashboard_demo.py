@@ -299,13 +299,16 @@ def create_professional_gantt_chart(df_filtered):
         else:
             bar_content = ""
         
-        # Create individual row with guaranteed blue bar
+        # Create individual row with guaranteed blue bar - force blue color
         st.markdown(f"""
         <div class="gantt-row">
             <div class="gantt-task-name {task_class}" title="{row['summary']}">{task_display}</div>
             <div class="gantt-timeline">
-                <div class="gantt-bar" 
-                     style="left: {left_percent}%; width: {width_percent}%; background-color: #1f77b4 !important; color: white !important;"
+                <div style="position: absolute; height: 24px; top: 2px; left: {left_percent}%; width: {width_percent}%; 
+                           background-color: #1f77b4; border-radius: 3px; display: flex; align-items: center; 
+                           justify-content: center; font-size: 11px; font-weight: bold; color: white; 
+                           text-overflow: ellipsis; overflow: hidden; white-space: nowrap; min-width: 3px; 
+                           box-shadow: 0 1px 3px rgba(0,0,0,0.2);"
                      title="{row['ticket_id']}: {start_date.strftime('%Y-%m-%d')} to {due_date.strftime('%Y-%m-%d')} ({duration} days)">
                     {bar_content}
                 </div>
@@ -313,22 +316,18 @@ def create_professional_gantt_chart(df_filtered):
         </div>
         """, unsafe_allow_html=True)
     
-    # Add timeline at the bottom
+    # Add timeline at the bottom - straight alignment
     st.markdown(f"""
-        <div class="gantt-timeline-footer">
-            <div class="gantt-task-header">Timeline</div>
-            <div class="gantt-timeline-axis">
+        <div style="display: flex; align-items: center; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px;">
+            <div style="width: 350px; font-weight: bold; padding: 8px; font-size: 14px;">Timeline</div>
+            <div style="flex: 1; height: 50px; position: relative; background-color: #f8f9fa; border: 1px solid #e9ecef; margin-left: 5px;">
     """, unsafe_allow_html=True)
     
-    # Add time markers at bottom
+    # Add time markers at bottom - straight vertical lines
     for marker in time_markers:
         st.markdown(f"""
-                <div style="position: absolute; left: {marker['position']}%; top: 0; 
-                           width: 1px; height: 40px; background-color: #333; 
-                           border-left: 1px solid #333;">
-                    <div style="position: absolute; top: 5px; left: -30px; 
-                               font-size: 10px; color: #333; white-space: nowrap; 
-                               transform: rotate(-45deg); transform-origin: left;">
+                <div style="position: absolute; left: {marker['position']}%; top: 0; width: 1px; height: 50px; background-color: #333; border-left: 1px solid #333;">
+                    <div style="position: absolute; top: 30px; left: -40px; font-size: 10px; color: #333; white-space: nowrap; width: 80px; text-align: center;">
                         {marker['label']}
                     </div>
                 </div>
