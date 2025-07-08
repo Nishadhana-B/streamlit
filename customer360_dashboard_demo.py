@@ -103,12 +103,15 @@ def create_timeline_view(df_filtered):
         # RAG status emoji
         rag_emoji = {"Green": "🟢", "Amber": "🟡", "Red": "🔴"}.get(row['rag'], "⚪")
         
-        # Format dates
+        # Format dates - FIXED to handle None values
         start_date = row['start_date'].strftime('%Y-%m-%d')
-        due_date = row['due_date'].strftime('%Y-%m-%d')
+        due_date = row['due_date'].strftime('%Y-%m-%d') if row['due_date'] is not None else 'No due date'
         
-        # Calculate duration
-        duration = (row['due_date'] - row['start_date']).days
+        # Calculate duration - FIXED to handle None values
+        if row['due_date'] is not None:
+            duration = (row['due_date'] - row['start_date']).days
+        else:
+            duration = 'N/A'
         
         # Create task display
         with st.container():
@@ -144,7 +147,7 @@ def main():
     # Main header
     st.markdown('<h1 class="main-header">Customer 360 Dashboard</h1>', unsafe_allow_html=True)
     
-    # Load sample data
+    # Load sample data - FIXED to handle tuple return
     try:
         df, summary_data = generate_sample_data()
         st.success(f"✅ Loaded {len(df)} sample tickets successfully!")
@@ -187,7 +190,7 @@ def main():
             st.write(f"• {status}: {count}")
     
     with col2:
-        # RAG Status
+        # RAG Status - FIXED column name from 'rag_status' to 'rag'
         rag_summary = df['rag'].value_counts()
         st.write("**RAG Status:**")
         for rag, count in rag_summary.items():
@@ -262,14 +265,14 @@ def main():
     # Data table view
     st.subheader("📋 Detailed View")
     if not df_filtered.empty:
-        # Show filtered data in a table
+        # Show filtered data in a table - FIXED column name and None handling
         display_df = df_filtered[['ticket_id', 'summary', 'status', 'rag', 'start_date', 'due_date', 'hierarchy_level']].copy()
         display_df['start_date'] = display_df['start_date'].dt.strftime('%Y-%m-%d')
-        display_df['due_date'] = display_df['due_date'].dt.strftime('%Y-%m-%d')
+        display_df['due_date'] = display_df['due_date'].dt.strftime('%Y-%m-%d', na_rep='No due date')
         
         st.dataframe(display_df, use_container_width=True)
     else:
         st.info("Expand items in the navigation to see detailed data.")
 
 if __name__ == "__main__":
-    main() 
+    main()
