@@ -51,6 +51,23 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+def safe_date_format(date_val):
+    """Safely format a date value, handling NaT and None."""
+    if date_val is None:
+        return 'No date'
+    
+    date_str = str(date_val)
+    if 'NaT' in date_str:
+        return 'No date'
+    
+    try:
+        if hasattr(date_val, 'year'):
+            return f"{date_val.year}-{date_val.month:02d}-{date_val.day:02d}"
+        else:
+            return 'No date'
+    except:
+        return 'No date'
+
 def get_visible_tickets(df, expanded_items):
     """Get tickets that should be visible based on expanded items."""
     visible_tickets = []
@@ -80,25 +97,21 @@ def create_gantt_chart(df_filtered):
         st.warning("No data to display. Expand items in the navigation to see the Gantt chart.")
         return None
     
-    # Filter out rows with invalid dates before processing
-    valid_data = []
+    # Filter out rows with invalid dates
+    valid_rows = []
     for idx, row in df_filtered.iterrows():
         start_date = row['start_date']
         due_date = row['due_date']
         
-        # Convert to string to check for NaT
-        start_str = str(start_date)
-        due_str = str(due_date)
-        
-        # Skip if start date is invalid
-        if start_str == 'NaT' or start_date is None:
+        # Check if start date is valid
+        if start_date is None or str(start_date) == 'NaT':
             continue
             
-        # Use start date + 1 day if due date is invalid
-        if due_str == 'NaT' or due_date is None:
+        # If due date is invalid, use start date + 1 day
+        if due_date is None or str(due_date) == 'NaT':
             due_date = start_date + timedelta(days=1)
         
-        valid_data.append({
+        valid_rows.append({
             'ticket_id': row['ticket_id'],
             'summary': row['summary'],
             'status': row['status'],
@@ -107,13 +120,12 @@ def create_gantt_chart(df_filtered):
             'due_date': due_date
         })
     
-    if not valid_data:
-        st.warning("No valid date data to display in Gantt chart.")
+    if not valid_rows:
+        st.info("No tickets with valid dates to display in Gantt chart.")
         return None
     
     # Sort by hierarchy level and start date
-    valid_df = pd.DataFrame(valid_data)
-    valid_df = valid_df.sort_values(['hierarchy_level', 'start_date'])
+    valid_rows.sort(key=lambda x: (x['hierarchy_level'], x['start_date']))
     
     # Color mapping for different levels
     level_colors = {
@@ -128,10 +140,14 @@ def create_gantt_chart(df_filtered):
     fig = go.Figure()
     
     # Add bars for each task
-    for idx, row in valid_df.iterrows():
+    for row in valid_rows:
         color = level_colors.get(row['hierarchy_level'], '#1f77b4')
         indent = "  " * row['hierarchy_level']
         task_label = f"{indent}{row['ticket_id']} | {row['summary']}"
+        
+        # Format dates safely for hover
+        start_str = safe_date_format(row['start_date'])
+        end_str = safe_date_format(row['due_date'])
         
         fig.add_trace(go.Bar(
             name=task_label,
@@ -143,8 +159,8 @@ def create_gantt_chart(df_filtered):
             text=row['status'],
             textposition='middle center',
             hovertemplate=f"<b>{row['ticket_id']}</b><br>" +
-                         f"Start: {row['start_date'].strftime('%Y-%m-%d')}<br>" +
-                         f"End: {row['due_date'].strftime('%Y-%m-%d')}<br>" +
+                         f"Start: {start_str}<br>" +
+                         f"End: {end_str}<br>" +
                          f"Status: {row['status']}<br>" +
                          f"Level: {row['hierarchy_level']}<extra></extra>",
             showlegend=False
@@ -160,11 +176,8 @@ def create_gantt_chart(df_filtered):
         },
         xaxis_title="Timeline",
         yaxis_title="Tasks",
-        height=max(600, len(valid_df) * 30),
-        xaxis=dict(
-            type='date',
-            tickformat='%Y-%m-%d'
-        ),
+        height=max(600, len(valid_rows) * 30),
+        xaxis=dict(type='date'),
         yaxis=dict(
             autorange='reversed',
             tickfont={'size': 10}
@@ -240,7 +253,7 @@ def main():
         rag_summary = df['rag'].value_counts()
         st.write("**RAG Status:**")
         for rag, count in rag_summary.items():
-            if rag:  # Only show non-empty RAG values
+            if rag and rag.strip():  # Only show non-empty RAG values
                 color = {'Green': '🟢', 'Amber': '🟡', 'Red': '🔴'}.get(rag, '⚪')
                 st.write(f"• {color} {rag}: {count}")
     
@@ -317,22 +330,9 @@ def main():
         # Show filtered data in a table
         display_df = df_filtered[['ticket_id', 'summary', 'status', 'rag', 'start_date', 'due_date', 'hierarchy_level']].copy()
         
-        # Convert dates to strings safely
-        display_df['start_date'] = display_df['start_date'].astype(str).replace('NaT', 'No start date')
-        display_df['due_date'] = display_df['due_date'].astype(str).replace('NaT', 'No due date')
-        
-        # Format proper dates
-        for idx, row in display_df.iterrows():
-            if row['start_date'] != 'No start date' and 'NaT' not in row['start_date']:
-                try:
-                    display_df.at[idx, 'start_date'] = pd.to_datetime(row['start_date']).strftime('%Y-%m-%d')
-                except:
-                    pass
-            if row['due_date'] != 'No due date' and 'NaT' not in row['due_date']:
-                try:
-                    display_df.at[idx, 'due_date'] = pd.to_datetime(row['due_date']).strftime('%Y-%m-%d')
-                except:
-                    pass
+        # Format dates safely
+        display_df['start_date'] = display_df['start_date'].apply(safe_date_format)
+        display_df['due_date'] = display_df['due_date'].apply(safe_date_format)
         
         st.dataframe(display_df, use_container_width=True)
     else:
