@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from sample_data import generate_sample_data
 
@@ -51,23 +50,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-def safe_date_format(date_val):
-    """Safely format a date value, handling NaT and None."""
-    if date_val is None:
-        return 'No date'
-    
-    date_str = str(date_val)
-    if 'NaT' in date_str:
-        return 'No date'
-    
-    try:
-        if hasattr(date_val, 'year'):
-            return f"{date_val.year}-{date_val.month:02d}-{date_val.day:02d}"
-        else:
-            return 'No date'
-    except:
-        return 'No date'
-
 def get_visible_tickets(df, expanded_items):
     """Get tickets that should be visible based on expanded items."""
     visible_tickets = []
@@ -91,41 +73,16 @@ def get_visible_tickets(df, expanded_items):
     
     return visible_tickets
 
-def create_gantt_chart(df_filtered):
-    """Create a Gantt chart using Plotly."""
+def create_timeline_view(df_filtered):
+    """Create a simple timeline view using Streamlit components."""
     if df_filtered.empty:
-        st.warning("No data to display. Expand items in the navigation to see the Gantt chart.")
-        return None
+        st.warning("No data to display. Expand items in the navigation to see the timeline.")
+        return
     
-    # Filter out rows with invalid dates
-    valid_rows = []
-    for idx, row in df_filtered.iterrows():
-        start_date = row['start_date']
-        due_date = row['due_date']
-        
-        # Check if start date is valid
-        if start_date is None or str(start_date) == 'NaT':
-            continue
-            
-        # If due date is invalid, use start date + 1 day
-        if due_date is None or str(due_date) == 'NaT':
-            due_date = start_date + timedelta(days=1)
-        
-        valid_rows.append({
-            'ticket_id': row['ticket_id'],
-            'summary': row['summary'],
-            'status': row['status'],
-            'hierarchy_level': row['hierarchy_level'],
-            'start_date': start_date,
-            'due_date': due_date
-        })
+    # Sort by hierarchy level and start date (handle NaT values)
+    df_sorted = df_filtered.sort_values(['hierarchy_level', 'start_date'], na_position='last')
     
-    if not valid_rows:
-        st.info("No tickets with valid dates to display in Gantt chart.")
-        return None
-    
-    # Sort by hierarchy level and start date
-    valid_rows.sort(key=lambda x: (x['hierarchy_level'], x['start_date']))
+    st.markdown("### 📅 Project Timeline")
     
     # Color mapping for different levels
     level_colors = {
@@ -136,62 +93,46 @@ def create_gantt_chart(df_filtered):
         4: '#9467bd'   # Level 4 - Purple
     }
     
-    # Create Plotly Gantt chart
-    fig = go.Figure()
-    
-    # Add bars for each task
-    for row in valid_rows:
-        color = level_colors.get(row['hierarchy_level'], '#1f77b4')
+    for _, row in df_sorted.iterrows():
+        # Create indentation based on hierarchy level
         indent = "  " * row['hierarchy_level']
-        task_label = f"{indent}{row['ticket_id']} | {row['summary']}"
         
-        # Format dates safely for hover
-        start_str = safe_date_format(row['start_date'])
-        end_str = safe_date_format(row['due_date'])
+        # Status emoji
+        status_emoji = {"Done": "✅", "In Progress": "🔄", "TO DO": "📋"}.get(row['status'], "📋")
         
-        fig.add_trace(go.Bar(
-            name=task_label,
-            x=[row['due_date'] - row['start_date']],
-            y=[task_label],
-            base=row['start_date'],
-            orientation='h',
-            marker=dict(color=color, opacity=0.7),
-            text=row['status'],
-            textposition='middle center',
-            hovertemplate=f"<b>{row['ticket_id']}</b><br>" +
-                         f"Start: {start_str}<br>" +
-                         f"End: {end_str}<br>" +
-                         f"Status: {row['status']}<br>" +
-                         f"Level: {row['hierarchy_level']}<extra></extra>",
-            showlegend=False
-        ))
-    
-    # Update layout
-    fig.update_layout(
-        title={
-            'text': "Project Gantt Chart - Hierarchical View",
-            'x': 0.5,
-            'xanchor': 'center',
-            'font': {'size': 20}
-        },
-        xaxis_title="Timeline",
-        yaxis_title="Tasks",
-        height=max(600, len(valid_rows) * 30),
-        xaxis=dict(type='date'),
-        yaxis=dict(
-            autorange='reversed',
-            tickfont={'size': 10}
-        ),
-        margin=dict(l=300, r=50, t=80, b=50),
-        plot_bgcolor='white',
-        paper_bgcolor='white'
-    )
-    
-    # Add grid
-    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
-    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
-    
-    return fig
+        # RAG status emoji
+        rag_emoji = {"Green": "🟢", "Amber": "🟡", "Red": "🔴"}.get(row['rag'], "⚪")
+        
+        # Format dates - FIXED to handle None values
+        start_date = row['start_date'].strftime('%Y-%m-%d') if not pd.isna(row['start_date']) else 'No start date'
+        due_date = row['due_date'].strftime('%Y-%m-%d') if not pd.isna(row['due_date']) else 'No due date'
+        
+        # Calculate duration - FIXED to handle None values
+        if not pd.isna(row['due_date']) and not pd.isna(row['start_date']):
+            duration = (row['due_date'] - row['start_date']).days
+        else:
+            duration = 'N/A'
+        
+        # Create task display
+        with st.container():
+            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+            
+            with col1:
+                st.markdown(f"**{indent}{row['ticket_id']}** | {row['summary']}")
+            
+            with col2:
+                st.markdown(f"{status_emoji} {row['status']}")
+            
+            with col3:
+                st.markdown(f"{rag_emoji} {row['rag']}")
+            
+            with col4:
+                st.markdown(f"📅 {duration} days")
+            
+            # Date range
+            st.caption(f"{indent}📅 {start_date} → {due_date}")
+            
+            st.markdown("---")
 
 def main():
     # Demo notice
@@ -253,11 +194,10 @@ def main():
         rag_summary = df['rag'].value_counts()
         st.write("**RAG Status:**")
         for rag, count in rag_summary.items():
-            if rag and rag.strip():  # Only show non-empty RAG values
-                color = {'Green': '🟢', 'Amber': '🟡', 'Red': '🔴'}.get(rag, '⚪')
-                st.write(f"• {color} {rag}: {count}")
+            color = {'Green': '🟢', 'Amber': '🟡', 'Red': '🔴'}.get(rag, '⚪')
+            st.write(f"• {color} {rag}: {count}")
     
-    # Create two columns for navigation and Gantt chart
+    # Create two columns for navigation and timeline
     col1, col2 = st.columns([1, 3])
     
     with col1:
@@ -310,29 +250,25 @@ def main():
         render_hierarchy()
     
     with col2:
-        st.subheader("📈 Gantt Chart")
+        st.subheader("📈 Project Timeline")
         
         # Get visible tickets based on expanded items
         visible_ticket_ids = get_visible_tickets(df, st.session_state.expanded_items)
         df_filtered = df[df['ticket_id'].isin(visible_ticket_ids)]
         
         if not df_filtered.empty:
-            # Create and display Gantt chart
-            fig = create_gantt_chart(df_filtered)
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
+            # Create and display timeline view
+            create_timeline_view(df_filtered)
         else:
-            st.info("Expand items in the navigation to see the Gantt chart.")
+            st.info("Expand items in the navigation to see the project timeline.")
     
     # Data table view
     st.subheader("📋 Detailed View")
     if not df_filtered.empty:
         # Show filtered data in a table
         display_df = df_filtered[['ticket_id', 'summary', 'status', 'rag', 'start_date', 'due_date', 'hierarchy_level']].copy()
-        
-        # Format dates safely
-        display_df['start_date'] = display_df['start_date'].apply(safe_date_format)
-        display_df['due_date'] = display_df['due_date'].apply(safe_date_format)
+        display_df['start_date'] = display_df['start_date'].dt.strftime('%Y-%m-%d', na_rep='No start date')
+        display_df['due_date'] = display_df['due_date'].dt.strftime('%Y-%m-%d', na_rep='No due date')
         
         st.dataframe(display_df, use_container_width=True)
     else:
