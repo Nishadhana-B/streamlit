@@ -51,19 +51,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-def safe_strftime(date_val, format_str='%Y-%m-%d', default='No date'):
-    """Safely format datetime, handling NaT and None values."""
-    try:
-        if date_val is None:
-            return default
-        if str(date_val) == 'NaT':
-            return default
-        if hasattr(date_val, 'strftime'):
-            return date_val.strftime(format_str)
-        return default
-    except:
-        return default
-
 def get_visible_tickets(df, expanded_items):
     """Get tickets that should be visible based on expanded items."""
     visible_tickets = []
@@ -93,8 +80,40 @@ def create_gantt_chart(df_filtered):
         st.warning("No data to display. Expand items in the navigation to see the Gantt chart.")
         return None
     
+    # Filter out rows with invalid dates before processing
+    valid_data = []
+    for idx, row in df_filtered.iterrows():
+        start_date = row['start_date']
+        due_date = row['due_date']
+        
+        # Convert to string to check for NaT
+        start_str = str(start_date)
+        due_str = str(due_date)
+        
+        # Skip if start date is invalid
+        if start_str == 'NaT' or start_date is None:
+            continue
+            
+        # Use start date + 1 day if due date is invalid
+        if due_str == 'NaT' or due_date is None:
+            due_date = start_date + timedelta(days=1)
+        
+        valid_data.append({
+            'ticket_id': row['ticket_id'],
+            'summary': row['summary'],
+            'status': row['status'],
+            'hierarchy_level': row['hierarchy_level'],
+            'start_date': start_date,
+            'due_date': due_date
+        })
+    
+    if not valid_data:
+        st.warning("No valid date data to display in Gantt chart.")
+        return None
+    
     # Sort by hierarchy level and start date
-    df_sorted = df_filtered.sort_values(['hierarchy_level', 'start_date'])
+    valid_df = pd.DataFrame(valid_data)
+    valid_df = valid_df.sort_values(['hierarchy_level', 'start_date'])
     
     # Color mapping for different levels
     level_colors = {
@@ -105,62 +124,29 @@ def create_gantt_chart(df_filtered):
         4: '#9467bd'   # Level 4 - Purple
     }
     
-    # Create Gantt chart data
-    gantt_data = []
-    
-    for idx, row in df_sorted.iterrows():
-        # Get color based on hierarchy level
-        color = level_colors.get(row['hierarchy_level'], '#1f77b4')
-        
-        # Create task label with proper indentation
-        indent = "  " * row['hierarchy_level']
-        task_label = f"{indent}{row['ticket_id']} | {row['summary']}"
-        
-        # Handle dates safely
-        start_date = row['start_date']
-        due_date = row['due_date']
-        
-        # Skip if no valid start date
-        if str(start_date) == 'NaT' or start_date is None:
-            continue
-            
-        # Use start date as end date if no due date
-        if str(due_date) == 'NaT' or due_date is None:
-            due_date = start_date + timedelta(days=1)  # Show as 1-day task
-        
-        gantt_data.append({
-            'Task': task_label,
-            'Start': start_date,
-            'Finish': due_date,
-            'Resource': row['status'],
-            'Level': row['hierarchy_level'],
-            'Color': color,
-            'Ticket_ID': row['ticket_id']
-        })
-    
-    if not gantt_data:
-        st.warning("No valid date data to display in Gantt chart.")
-        return None
-    
     # Create Plotly Gantt chart
     fig = go.Figure()
     
     # Add bars for each task
-    for i, task in enumerate(gantt_data):
+    for idx, row in valid_df.iterrows():
+        color = level_colors.get(row['hierarchy_level'], '#1f77b4')
+        indent = "  " * row['hierarchy_level']
+        task_label = f"{indent}{row['ticket_id']} | {row['summary']}"
+        
         fig.add_trace(go.Bar(
-            name=task['Task'],
-            x=[task['Finish'] - task['Start']],
-            y=[task['Task']],
-            base=task['Start'],
+            name=task_label,
+            x=[row['due_date'] - row['start_date']],
+            y=[task_label],
+            base=row['start_date'],
             orientation='h',
-            marker=dict(color=task['Color'], opacity=0.7),
-            text=task['Resource'],
+            marker=dict(color=color, opacity=0.7),
+            text=row['status'],
             textposition='middle center',
-            hovertemplate=f"<b>{task['Ticket_ID']}</b><br>" +
-                         f"Start: {task['Start'].strftime('%Y-%m-%d')}<br>" +
-                         f"End: {task['Finish'].strftime('%Y-%m-%d')}<br>" +
-                         f"Status: {task['Resource']}<br>" +
-                         f"Level: {task['Level']}<extra></extra>",
+            hovertemplate=f"<b>{row['ticket_id']}</b><br>" +
+                         f"Start: {row['start_date'].strftime('%Y-%m-%d')}<br>" +
+                         f"End: {row['due_date'].strftime('%Y-%m-%d')}<br>" +
+                         f"Status: {row['status']}<br>" +
+                         f"Level: {row['hierarchy_level']}<extra></extra>",
             showlegend=False
         ))
     
@@ -174,7 +160,7 @@ def create_gantt_chart(df_filtered):
         },
         xaxis_title="Timeline",
         yaxis_title="Tasks",
-        height=max(600, len(gantt_data) * 30),
+        height=max(600, len(valid_df) * 30),
         xaxis=dict(
             type='date',
             tickformat='%Y-%m-%d'
@@ -207,7 +193,7 @@ def main():
     # Main header
     st.markdown('<h1 class="main-header">Customer 360 Dashboard</h1>', unsafe_allow_html=True)
     
-    # Load sample data - FIXED to handle tuple return
+    # Load sample data
     try:
         df, summary_data = generate_sample_data()
         st.success(f"✅ Loaded {len(df)} sample tickets successfully!")
@@ -254,8 +240,9 @@ def main():
         rag_summary = df['rag'].value_counts()
         st.write("**RAG Status:**")
         for rag, count in rag_summary.items():
-            color = {'Green': '🟢', 'Amber': '🟡', 'Red': '🔴'}.get(rag, '⚪')
-            st.write(f"• {color} {rag}: {count}")
+            if rag:  # Only show non-empty RAG values
+                color = {'Green': '🟢', 'Amber': '🟡', 'Red': '🔴'}.get(rag, '⚪')
+                st.write(f"• {color} {rag}: {count}")
     
     # Create two columns for navigation and Gantt chart
     col1, col2 = st.columns([1, 3])
@@ -327,12 +314,25 @@ def main():
     # Data table view
     st.subheader("📋 Detailed View")
     if not df_filtered.empty:
-        # Show filtered data in a table - FIXED to handle NaT values safely
+        # Show filtered data in a table
         display_df = df_filtered[['ticket_id', 'summary', 'status', 'rag', 'start_date', 'due_date', 'hierarchy_level']].copy()
         
-        # Format dates safely
-        display_df['start_date'] = display_df['start_date'].apply(lambda x: safe_strftime(x, default='No start date'))
-        display_df['due_date'] = display_df['due_date'].apply(lambda x: safe_strftime(x, default='No due date'))
+        # Convert dates to strings safely
+        display_df['start_date'] = display_df['start_date'].astype(str).replace('NaT', 'No start date')
+        display_df['due_date'] = display_df['due_date'].astype(str).replace('NaT', 'No due date')
+        
+        # Format proper dates
+        for idx, row in display_df.iterrows():
+            if row['start_date'] != 'No start date' and 'NaT' not in row['start_date']:
+                try:
+                    display_df.at[idx, 'start_date'] = pd.to_datetime(row['start_date']).strftime('%Y-%m-%d')
+                except:
+                    pass
+            if row['due_date'] != 'No due date' and 'NaT' not in row['due_date']:
+                try:
+                    display_df.at[idx, 'due_date'] = pd.to_datetime(row['due_date']).strftime('%Y-%m-%d')
+                except:
+                    pass
         
         st.dataframe(display_df, use_container_width=True)
     else:
