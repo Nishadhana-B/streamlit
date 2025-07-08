@@ -92,19 +92,36 @@ st.markdown("""
         position: absolute;
         height: 24px;
         top: 2px;
-        background-color: #1f77b4;
+        background-color: #1f77b4 !important;
         border-radius: 3px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 11px;
         font-weight: bold;
-        color: white;
+        color: white !important;
         text-overflow: ellipsis;
         overflow: hidden;
         white-space: nowrap;
         min-width: 3px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .gantt-timeline-footer {
+        display: flex;
+        align-items: center;
+        margin-top: 10px;
+        padding: 10px 0;
+        border-top: 1px solid #ddd;
+        font-size: 12px;
+        color: #666;
+    }
+    .gantt-timeline-axis {
+        flex: 1;
+        height: 40px;
+        position: relative;
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        margin-left: 5px;
     }
     .task-level-0 { 
         font-weight: bold; 
@@ -168,7 +185,7 @@ def build_hierarchy_tree(df):
     return df_with_hierarchy
 
 def create_professional_gantt_chart(df_filtered):
-    """Create a professional Gantt chart with blue bars and time axis."""
+    """Create a professional Gantt chart with blue bars and bottom timeline."""
     if df_filtered.empty:
         st.warning("No data to display for Gantt chart.")
         return
@@ -206,18 +223,14 @@ def create_professional_gantt_chart(df_filtered):
         markers = []
         
         # Determine appropriate interval based on total duration
-        if total_days <= 30:
-            # Daily markers for short periods
-            interval_days = 7
-        elif total_days <= 90:
-            # Weekly markers for medium periods
-            interval_days = 14
+        if total_days <= 60:
+            interval_days = 7  # Weekly
+        elif total_days <= 180:
+            interval_days = 14  # Bi-weekly
         elif total_days <= 365:
-            # Monthly markers for longer periods
-            interval_days = 30
+            interval_days = 30  # Monthly
         else:
-            # Quarterly markers for very long periods
-            interval_days = 90
+            interval_days = 60  # Bi-monthly
         
         current_date = min_date
         while current_date <= max_date:
@@ -227,7 +240,7 @@ def create_professional_gantt_chart(df_filtered):
             markers.append({
                 'date': current_date,
                 'position': position_percent,
-                'label': current_date.strftime('%m/%d')
+                'label': current_date.strftime('%Y-%m-%d')
             })
             
             current_date += timedelta(days=interval_days)
@@ -236,33 +249,12 @@ def create_professional_gantt_chart(df_filtered):
     
     time_markers = generate_time_markers(min_date, max_date, total_days)
     
-    # Create header with time axis
+    # Create header (no time axis row)
     st.markdown(f"""
     <div class="gantt-container">
         <div class="gantt-header">
             <div class="gantt-task-header">Task Name</div>
             <div class="gantt-timeline-header">Timeline ({min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')})</div>
-        </div>
-        <div class="gantt-row">
-            <div class="gantt-task-name" style="background-color: #f8f9fa; font-weight: bold;">Time Axis</div>
-            <div class="gantt-timeline" style="height: 40px; background-color: #f8f9fa;">
-    """, unsafe_allow_html=True)
-    
-    # Add time markers
-    for marker in time_markers:
-        st.markdown(f"""
-                <div style="position: absolute; left: {marker['position']}%; top: 0; 
-                           width: 1px; height: 40px; background-color: #666; 
-                           border-left: 1px solid #666;">
-                    <div style="position: absolute; top: 25px; left: -15px; 
-                               font-size: 10px; color: #666; white-space: nowrap;">
-                        {marker['label']}
-                    </div>
-                </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("""
-            </div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -280,9 +272,9 @@ def create_professional_gantt_chart(df_filtered):
         left_percent = (start_offset / total_days) * 100
         width_percent = (duration / total_days) * 100
         
-        # Ensure minimum width for visibility and prevent white bars
-        if width_percent < 3:
-            width_percent = 3
+        # Ensure minimum width for visibility
+        if width_percent < 2:
+            width_percent = 2
         
         # Ensure bars don't go beyond 100%
         if left_percent + width_percent > 100:
@@ -299,21 +291,21 @@ def create_professional_gantt_chart(df_filtered):
             indent = "  " * level
             task_display = f"{indent}{row['ticket_id']} | {row['summary'][:30]}"
         
-        # Bar content - only show ticket ID if bar is wide enough, otherwise empty
-        if width_percent > 12:
+        # Bar content - show ticket ID only if bar is wide enough
+        if width_percent > 10:
             bar_content = row['ticket_id']
-        elif width_percent > 8:
+        elif width_percent > 6:
             bar_content = row['ticket_id'][:4]
         else:
             bar_content = ""
         
-        # Create individual row with proper blue bar
+        # Create individual row with guaranteed blue bar
         st.markdown(f"""
         <div class="gantt-row">
             <div class="gantt-task-name {task_class}" title="{row['summary']}">{task_display}</div>
             <div class="gantt-timeline">
                 <div class="gantt-bar" 
-                     style="left: {left_percent}%; width: {width_percent}%; background-color: #1f77b4 !important;"
+                     style="left: {left_percent}%; width: {width_percent}%; background-color: #1f77b4 !important; color: white !important;"
                      title="{row['ticket_id']}: {start_date.strftime('%Y-%m-%d')} to {due_date.strftime('%Y-%m-%d')} ({duration} days)">
                     {bar_content}
                 </div>
@@ -321,11 +313,36 @@ def create_professional_gantt_chart(df_filtered):
         </div>
         """, unsafe_allow_html=True)
     
-    # Close container
-    st.markdown("</div>", unsafe_allow_html=True)
+    # Add timeline at the bottom
+    st.markdown(f"""
+        <div class="gantt-timeline-footer">
+            <div class="gantt-task-header">Timeline</div>
+            <div class="gantt-timeline-axis">
+    """, unsafe_allow_html=True)
+    
+    # Add time markers at bottom
+    for marker in time_markers:
+        st.markdown(f"""
+                <div style="position: absolute; left: {marker['position']}%; top: 0; 
+                           width: 1px; height: 40px; background-color: #333; 
+                           border-left: 1px solid #333;">
+                    <div style="position: absolute; top: 5px; left: -30px; 
+                               font-size: 10px; color: #333; white-space: nowrap; 
+                               transform: rotate(-45deg); transform-origin: left;">
+                        {marker['label']}
+                    </div>
+                </div>
+        """, unsafe_allow_html=True)
+    
+    # Close timeline and container
+    st.markdown("""
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Add status info
-    st.markdown("**📊 All bars are blue representing project timeline with time axis markers**")
+    st.markdown("**📊 All bars are blue representing project timeline**")
 
 def format_date_column(series):
     """Format a datetime series to string, handling NaT values."""
