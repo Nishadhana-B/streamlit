@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from sample_data import generate_sample_data
 
@@ -73,6 +75,59 @@ def get_visible_tickets(df, expanded_items):
     
     return visible_tickets
 
+def create_gantt_chart(df_filtered):
+    """Create a Gantt chart using Plotly."""
+    if df_filtered.empty:
+        st.warning("No data to display for Gantt chart.")
+        return
+    
+    # Prepare data for Gantt chart
+    gantt_data = []
+    
+    for _, row in df_filtered.iterrows():
+        # Handle missing dates
+        start_date = row['start_date'] if not pd.isna(row['start_date']) else datetime.now()
+        due_date = row['due_date'] if not pd.isna(row['due_date']) else start_date + timedelta(days=30)
+        
+        # Color based on status
+        color_map = {
+            'Done': '#2ca02c',      # Green
+            'In Progress': '#ff7f0e',  # Orange
+            'TO DO': '#d62728'      # Red
+        }
+        
+        gantt_data.append({
+            'Task': f"{row['ticket_id']} - {row['summary'][:50]}{'...' if len(row['summary']) > 50 else ''}",
+            'Start': start_date,
+            'Finish': due_date,
+            'Status': row['status'],
+            'Color': color_map.get(row['status'], '#1f77b4')
+        })
+    
+    # Create Gantt chart
+    fig = px.timeline(
+        gantt_data,
+        x_start="Start",
+        x_end="Finish",
+        y="Task",
+        color="Status",
+        title="Project Gantt Chart",
+        color_discrete_map={
+            'Done': '#2ca02c',
+            'In Progress': '#ff7f0e',
+            'TO DO': '#d62728'
+        }
+    )
+    
+    fig.update_layout(
+        height=max(400, len(gantt_data) * 30),
+        xaxis_title="Timeline",
+        yaxis_title="Tasks",
+        showlegend=True
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
 def create_timeline_view(df_filtered):
     """Create a simple timeline view using Streamlit components."""
     if df_filtered.empty:
@@ -133,6 +188,10 @@ def create_timeline_view(df_filtered):
             st.caption(f"{indent}📅 {start_date} → {due_date}")
             
             st.markdown("---")
+
+def format_date_column(series):
+    """Format a datetime series to string, handling NaT values."""
+    return series.apply(lambda x: x.strftime('%Y-%m-%d') if not pd.isna(x) else 'No date')
 
 def main():
     # Demo notice
@@ -262,13 +321,21 @@ def main():
         else:
             st.info("Expand items in the navigation to see the project timeline.")
     
+    # Gantt Chart Section
+    st.subheader("📊 Gantt Chart")
+    if not df_filtered.empty:
+        create_gantt_chart(df_filtered)
+    else:
+        st.info("Expand items in the navigation to see the Gantt chart.")
+    
     # Data table view
     st.subheader("📋 Detailed View")
     if not df_filtered.empty:
         # Show filtered data in a table
         display_df = df_filtered[['ticket_id', 'summary', 'status', 'rag', 'start_date', 'due_date', 'hierarchy_level']].copy()
-        display_df['start_date'] = display_df['start_date'].dt.strftime('%Y-%m-%d', na_rep='No start date')
-        display_df['due_date'] = display_df['due_date'].dt.strftime('%Y-%m-%d', na_rep='No due date')
+        # Use custom function to format dates
+        display_df['start_date'] = format_date_column(display_df['start_date'])
+        display_df['due_date'] = format_date_column(display_df['due_date'])
         
         st.dataframe(display_df, use_container_width=True)
     else:
