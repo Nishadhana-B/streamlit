@@ -1,9 +1,7 @@
 import streamlit as st
 import pandas as pd
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend for Streamlit Cloud
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
+import plotly.graph_objects as go
+import plotly.express as px
 from datetime import datetime, timedelta
 import io
 import base64
