@@ -103,12 +103,12 @@ def create_timeline_view(df_filtered):
         # RAG status emoji
         rag_emoji = {"Green": "🟢", "Amber": "🟡", "Red": "🔴"}.get(row['rag'], "⚪")
         
-        # Format dates - FIXED to handle None values
+        # Format dates - FIXED to handle pandas NaT values
         start_date = row['start_date'].strftime('%Y-%m-%d')
-        due_date = row['due_date'].strftime('%Y-%m-%d') if row['due_date'] is not None else 'No due date'
+        due_date = row['due_date'].strftime('%Y-%m-%d') if not pd.isna(row['due_date']) else 'No due date'
         
-        # Calculate duration - FIXED to handle None values
-        if row['due_date'] is not None:
+        # Calculate duration - FIXED to handle pandas NaT values
+        if not pd.isna(row['due_date']):
             duration = (row['due_date'] - row['start_date']).days
         else:
             duration = 'N/A'
@@ -265,7 +265,7 @@ def main():
     # Data table view
     st.subheader("📋 Detailed View")
     if not df_filtered.empty:
-        # Show filtered data in a table - FIXED column name and None handling
+        # Show filtered data in a table - FIXED column name and NaT handling
         display_df = df_filtered[['ticket_id', 'summary', 'status', 'rag', 'start_date', 'due_date', 'hierarchy_level']].copy()
         display_df['start_date'] = display_df['start_date'].dt.strftime('%Y-%m-%d')
         display_df['due_date'] = display_df['due_date'].dt.strftime('%Y-%m-%d', na_rep='No due date')
