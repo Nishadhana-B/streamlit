@@ -103,14 +103,19 @@ def create_timeline_view(df_filtered):
         # RAG status emoji
         rag_emoji = {"Green": "🟢", "Amber": "🟡", "Red": "🔴"}.get(row['rag'], "⚪")
         
-        # Format dates - FIXED to handle pandas NaT values
+        # Format dates - FIXED to handle pandas NaT values properly
         start_date = row['start_date'].strftime('%Y-%m-%d')
-        due_date = row['due_date'].strftime('%Y-%m-%d') if not pd.isna(row['due_date']) else 'No due date'
         
-        # Calculate duration - FIXED to handle pandas NaT values
-        if not pd.isna(row['due_date']):
-            duration = (row['due_date'] - row['start_date']).days
-        else:
+        # Handle due_date more carefully
+        try:
+            if pd.notna(row['due_date']) and row['due_date'] is not None:
+                due_date = row['due_date'].strftime('%Y-%m-%d')
+                duration = (row['due_date'] - row['start_date']).days
+            else:
+                due_date = 'No due date'
+                duration = 'N/A'
+        except (AttributeError, TypeError, ValueError):
+            due_date = 'No due date'
             duration = 'N/A'
         
         # Create task display
